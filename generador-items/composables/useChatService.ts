@@ -1,4 +1,4 @@
-import type { ChatResponse } from '~/types';
+import type { ChatResponse } from '../types';
 
 export const useChatService = () => {
   const config = useRuntimeConfig();

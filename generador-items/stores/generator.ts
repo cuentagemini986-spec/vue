@@ -1,26 +1,46 @@
 import { defineStore } from 'pinia';
-import type { Item } from '~/types';
+import type { Item } from '../types';
+import { useChatService } from '../composables/useChatService';
 
 export const useGeneratorStore = defineStore('generator', {
   state: () => ({
     generatedItems: [] as Item[],
     isLoading: false,
-    error: null as string | null
+    error: null as string | null,
+    selectedItemId: null as string | null, // <-- NUEVO: Para saber qué ítem mostrar en el modal
   }),
 
+  getters: {
+    getItems: (state) => state.generatedItems,
+    getIsLoading: (state) => state.isLoading,
+    getError: (state) => state.error,
+    
+    // --- NUEVO GETTER: Devuelve el ítem actualmente seleccionado ---
+    getSelectedItem: (state) => {
+      if (!state.selectedItemId) {
+        return null;
+      }
+      // Busca el ítem en el array usando el ID guardado
+      return state.generatedItems.find(item => item.id === state.selectedItemId) || null;
+    }
+  },
+
   actions: {
+    // --- NUEVA ACCIÓN: Para abrir/cerrar el modal ---
+    selectItem(itemId: string | null) {
+      this.selectedItemId = itemId;
+    },
+
+    // --- ACCIONES EXISTENTES (Con todas las correcciones) ---
     async generateItems(payload: { prompt: string; formato: string; codigoItem: string }) {
       this.isLoading = true;
       this.error = null;
 
       try {
         const { generateResponse } = useChatService();
-        const response = await generateResponse(payload.prompt);
+        const response = await generateResponse(payload.prompt) as { response: string };
 
-        // Parse the response and create items
         const items = this.parseResponseToItems(response.response, payload.formato, payload.codigoItem);
-        
-        // Add new items to the beginning of the array
         this.generatedItems.unshift(...items);
       } catch (error) {
         console.error('Error generating items:', error);
@@ -32,8 +52,6 @@ export const useGeneratorStore = defineStore('generator', {
 
     parseResponseToItems(response: string, formato: string, codigoItem: string): Item[] {
       const items: Item[] = [];
-      
-      // Split by separator if multiple items
       const itemTexts = response.split('---###---');
       
       itemTexts.forEach((itemText, index) => {
@@ -77,27 +95,39 @@ export const useGeneratorStore = defineStore('generator', {
     extractSection(text: string, sectionName: string): string {
       const regex = new RegExp(`${sectionName}[:\\s]*([\\s\\S]*?)(?=(?:CONTEXTO|REACTIVO|OPCIONES DE RESPUESTA|RESPUESTA CORRECTA|SUSTENTACIÓN BIBLIOGRÁFICA|AJUSTE METODOLÓGICO DEL ÍTEM)[:\\s]*|$)`, 'i');
       const match = text.match(regex);
-      return match ? match[1].trim() : '';
+      // Corrección de 'match' y 'match[1]'
+      return match && match[1] ? match[1].trim() : '';
     },
 
     updateItem(itemId: string, updatedContent: string) {
       const itemIndex = this.generatedItems.findIndex(item => item.id === itemId);
+      
       if (itemIndex !== -1) {
-        const item = this.generatedItems[itemIndex];
-        const updatedSections = {
-          contexto: this.extractSection(updatedContent, 'CONTEXTO'),
-          reactivo: this.extractSection(updatedContent, 'REACTIVO'),
-          opciones: this.extractSection(updatedContent, 'OPCIONES DE RESPUESTA'),
-          respuestaCorrecta: this.extractSection(updatedContent, 'RESPUESTA CORRECTA'),
-          sustentacion: this.extractSection(updatedContent, 'SUSTENTACIÓN BIBLIOGRÁFICA'),
-          ajusteMetodologico: this.extractSection(updatedContent, 'AJUSTE METODOLÓGICO DEL ÍTEM')
-        };
+        const item = this.generatedItems[itemIndex]; 
+        
+        // Corrección: Chequeo de 'item'
+        if (item) { 
+          const updatedSections = {
+            contexto: this.extractSection(updatedContent, 'CONTEXTO'),
+            reactivo: this.extractSection(updatedContent, 'REACTIVO'),
+            opciones: this.extractSection(updatedContent, 'OPCIONES DE RESPUESTA'),
+            respuestaCorrecta: this.extractSection(updatedContent, 'RESPUESTA CORRECTA'),
+            sustentacion: this.extractSection(updatedContent, 'SUSTENTACIÓN BIBLIOGRÁFICA'),
+            ajusteMetodologico: this.extractSection(updatedContent, 'AJUSTE METODOLÓGICO DEL ÍTEM')
+          };
 
-        this.generatedItems[itemIndex] = {
-          ...item,
-          ...updatedSections,
-          isEditing: false
-        };
+          this.generatedItems[itemIndex] = {
+            id: item.id,
+            title: item.title,
+            createdDate: item.createdDate,
+            formato: item.formato,
+            codigoItem: item.codigoItem,
+            isCollapsed: item.isCollapsed,
+            isSaved: item.isSaved,
+            ...updatedSections,
+            isEditing: false
+          };
+        }
       }
     },
 
@@ -107,6 +137,7 @@ export const useGeneratorStore = defineStore('generator', {
 
     saveItem(itemId: string) {
       const item = this.generatedItems.find(item => item.id === itemId);
+      // Corrección: Chequeo de 'item'
       if (item) {
         item.isSaved = true;
       }
@@ -114,6 +145,7 @@ export const useGeneratorStore = defineStore('generator', {
 
     toggleCollapse(itemId: string) {
       const item = this.generatedItems.find(item => item.id === itemId);
+      // Corrección: Chequeo de 'item'
       if (item) {
         item.isCollapsed = !item.isCollapsed;
       }
@@ -121,15 +153,10 @@ export const useGeneratorStore = defineStore('generator', {
 
     toggleEdit(itemId: string) {
       const item = this.generatedItems.find(item => item.id === itemId);
+      // Corrección: Chequeo de 'item'
       if (item) {
         item.isEditing = !item.isEditing;
       }
     }
   },
-
-  getters: {
-    getItems: (state) => state.generatedItems,
-    getIsLoading: (state) => state.isLoading,
-    getError: (state) => state.error
-  }
 });
